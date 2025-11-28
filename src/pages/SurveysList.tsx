@@ -1,0 +1,121 @@
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { ArrowLeft, ClipboardList, Calendar } from "lucide-react";
+import { format } from "date-fns";
+import { ru } from "date-fns/locale";
+
+interface Survey {
+  id: string;
+  title: string;
+  description: string | null;
+  created_at: string;
+}
+
+const SurveysList = () => {
+  const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSurveys();
+  }, []);
+
+  const fetchSurveys = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("surveys")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setSurveys(data || []);
+    } catch (error) {
+      console.error("Error fetching surveys:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-hero py-12">
+      <div className="container mx-auto px-4 max-w-6xl">
+        <Button asChild variant="ghost" className="mb-6">
+          <Link to="/">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            На главную
+          </Link>
+        </Button>
+
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
+            Все опросы
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Выберите опрос для прохождения или просмотра результатов
+          </p>
+        </div>
+
+        {isLoading ? (
+          <div className="grid md:grid-cols-2 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="p-6 animate-pulse">
+                <div className="h-6 bg-muted rounded w-3/4 mb-3"></div>
+                <div className="h-4 bg-muted rounded w-full mb-2"></div>
+                <div className="h-4 bg-muted rounded w-2/3"></div>
+              </Card>
+            ))}
+          </div>
+        ) : surveys.length === 0 ? (
+          <Card className="p-12 text-center shadow-soft">
+            <ClipboardList className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-2xl font-bold mb-2">Опросов пока нет</h2>
+            <p className="text-muted-foreground mb-6">
+              Создайте свой первый опрос, чтобы начать собирать ответы
+            </p>
+            <Button asChild className="shadow-medium">
+              <Link to="/create">Создать опрос</Link>
+            </Button>
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-6">
+            {surveys.map((survey) => (
+              <Card
+                key={survey.id}
+                className="p-6 space-y-4 shadow-soft hover:shadow-medium transition-all duration-300 hover:-translate-y-1 bg-gradient-card border-0"
+              >
+                <div>
+                  <h3 className="text-2xl font-bold mb-2">{survey.title}</h3>
+                  {survey.description && (
+                    <p className="text-muted-foreground line-clamp-2">
+                      {survey.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Calendar className="w-4 h-4" />
+                  <span>
+                    {format(new Date(survey.created_at), "d MMMM yyyy", { locale: ru })}
+                  </span>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button asChild className="flex-1 shadow-soft">
+                    <Link to={`/survey/${survey.id}`}>Пройти опрос</Link>
+                  </Button>
+                  <Button asChild variant="outline" className="flex-1">
+                    <Link to={`/results/${survey.id}`}>Результаты</Link>
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default SurveysList;
