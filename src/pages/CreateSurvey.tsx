@@ -1,14 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useNavigate } from "react-router-dom";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 
 type QuestionType = "text" | "multiple_choice" | "rating";
@@ -18,229 +25,279 @@ interface Question {
   text: string;
   type: QuestionType;
   options: string[];
+  allowMultiple: boolean;
 }
 
 const CreateSurvey = () => {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [questions, setQuestions] = useState<Question[]>([
-    { id: "1", text: "", type: "text", options: [] }
-  ]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
+
+  useEffect(() => {
+    // Check if user is logged in
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        toast.error("Необходимо войти в систему");
+        navigate("/auth");
+      }
+    });
+  }, [navigate]);
 
   const addQuestion = () => {
     const newQuestion: Question = {
-      id: Date.now().toString(),
+      id: Math.random().toString(),
       text: "",
       type: "text",
-      options: []
+      options: [],
+      allowMultiple: false,
     };
     setQuestions([...questions, newQuestion]);
   };
 
   const removeQuestion = (id: string) => {
-    if (questions.length > 1) {
-      setQuestions(questions.filter(q => q.id !== id));
-    }
+    setQuestions(questions.filter((q) => q.id !== id));
   };
 
   const updateQuestion = (id: string, field: keyof Question, value: any) => {
-    setQuestions(questions.map(q => q.id === id ? { ...q, [field]: value } : q));
+    setQuestions(
+      questions.map((q) => (q.id === id ? { ...q, [field]: value } : q))
+    );
   };
 
   const addOption = (questionId: string) => {
-    setQuestions(questions.map(q => 
-      q.id === questionId ? { ...q, options: [...q.options, ""] } : q
-    ));
+    setQuestions(
+      questions.map((q) =>
+        q.id === questionId ? { ...q, options: [...q.options, ""] } : q
+      )
+    );
   };
 
   const updateOption = (questionId: string, optionIndex: number, value: string) => {
-    setQuestions(questions.map(q => 
-      q.id === questionId 
-        ? { ...q, options: q.options.map((opt, idx) => idx === optionIndex ? value : opt) }
-        : q
-    ));
+    setQuestions(
+      questions.map((q) =>
+        q.id === questionId
+          ? {
+              ...q,
+              options: q.options.map((opt, idx) =>
+                idx === optionIndex ? value : opt
+              ),
+            }
+          : q
+      )
+    );
   };
 
   const removeOption = (questionId: string, optionIndex: number) => {
-    setQuestions(questions.map(q => 
-      q.id === questionId 
-        ? { ...q, options: q.options.filter((_, idx) => idx !== optionIndex) }
-        : q
-    ));
+    setQuestions(
+      questions.map((q) =>
+        q.id === questionId
+          ? { ...q, options: q.options.filter((_, idx) => idx !== optionIndex) }
+          : q
+      )
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!title.trim()) {
       toast.error("Пожалуйста, введите название опроса");
       return;
     }
 
-    if (questions.some(q => !q.text.trim())) {
-      toast.error("Все вопросы должны иметь текст");
+    if (questions.length === 0) {
+      toast.error("Добавьте хотя бы один вопрос");
       return;
     }
-
-    if (questions.some(q => q.type === "multiple_choice" && q.options.filter(opt => opt.trim()).length < 2)) {
-      toast.error("Вопросы с выбором должны иметь минимум 2 варианта ответа");
-      return;
-    }
-
-    setIsSubmitting(true);
 
     try {
-      // Create survey
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Необходимо войти в систему");
+        navigate("/auth");
+        return;
+      }
+
+      // Insert survey
       const { data: survey, error: surveyError } = await supabase
         .from("surveys")
-        .insert({ title, description })
+        .insert({ 
+          title, 
+          description,
+          user_id: session.user.id 
+        })
         .select()
         .single();
 
       if (surveyError) throw surveyError;
 
-      // Create questions
+      // Insert questions
       for (let i = 0; i < questions.length; i++) {
         const question = questions[i];
-        const { data: questionData, error: questionError } = await supabase
+        const { data: insertedQuestion, error: questionError } = await supabase
           .from("questions")
           .insert({
             survey_id: survey.id,
             question_text: question.text,
             question_type: question.type,
-            order_index: i
+            order_index: i,
+            allow_multiple_answers: question.allowMultiple,
           })
           .select()
           .single();
 
         if (questionError) throw questionError;
 
-        // Create options for multiple choice questions
+        // Insert options for multiple choice questions
         if (question.type === "multiple_choice" && question.options.length > 0) {
-          const optionsToInsert = question.options
-            .filter(opt => opt.trim())
+          const optionsData = question.options
+            .filter((opt) => opt.trim())
             .map((opt, idx) => ({
-              question_id: questionData.id,
+              question_id: insertedQuestion.id,
               option_text: opt,
-              order_index: idx
+              order_index: idx,
             }));
 
           const { error: optionsError } = await supabase
             .from("question_options")
-            .insert(optionsToInsert);
+            .insert(optionsData);
 
           if (optionsError) throw optionsError;
         }
       }
 
-      toast.success("Опрос успешно создан!");
+      toast.success("Опрос создан успешно!");
       navigate(`/survey/${survey.id}`);
     } catch (error) {
       console.error("Error creating survey:", error);
       toast.error("Ошибка при создании опроса");
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero py-12">
+    <div className="min-h-screen bg-gradient-to-br from-survey-gradient-start via-survey-gradient-middle to-survey-gradient-end py-12">
       <div className="container mx-auto px-4 max-w-4xl">
         <Button asChild variant="ghost" className="mb-6">
           <Link to="/">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            На главную
+            Назад
           </Link>
         </Button>
 
-        <Card className="p-8 shadow-large bg-gradient-card border-0">
-          <h1 className="text-4xl font-bold mb-8 bg-gradient-primary bg-clip-text text-transparent">
-            Создание опроса
+        <Card className="p-8 md:p-12 shadow-survey-card bg-white/95 backdrop-blur-sm">
+          <h1 className="text-4xl font-display font-bold mb-8 text-survey-primary">
+            Создать опрос
           </h1>
 
           <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="title" className="text-lg font-semibold">Название опроса</Label>
+                <Label htmlFor="title">Название</Label>
                 <Input
                   id="title"
-                  placeholder="Введите название опроса"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="text-lg"
+                  placeholder="Введите название опроса"
                   required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-lg font-semibold">Описание (необязательно)</Label>
+                <Label htmlFor="description">Описание</Label>
                 <Textarea
                   id="description"
-                  placeholder="Добавьте описание опроса"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="min-h-[100px]"
+                  placeholder="Опишите ваш опрос (необязательно)"
+                  rows={3}
                 />
               </div>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold">Вопросы</h2>
-                <Button type="button" onClick={addQuestion} size="sm" className="shadow-soft">
+                <h2 className="text-2xl font-display font-semibold text-survey-primary">
+                  Вопросы
+                </h2>
+                <Button
+                  type="button"
+                  onClick={addQuestion}
+                  variant="outline"
+                  size="sm"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Добавить вопрос
                 </Button>
               </div>
 
               {questions.map((question, index) => (
-                <Card key={question.id} className="p-6 space-y-4 shadow-soft">
+                <Card key={question.id} className="p-6 space-y-4 bg-survey-card-bg">
                   <div className="flex items-start justify-between">
-                    <Label className="text-lg font-semibold">Вопрос {index + 1}</Label>
-                    {questions.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeQuestion(question.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
+                    <Label className="text-lg font-semibold">
+                      Вопрос {index + 1}
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeQuestion(question.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
 
                   <Input
-                    placeholder="Введите текст вопроса"
                     value={question.text}
-                    onChange={(e) => updateQuestion(question.id, "text", e.target.value)}
+                    onChange={(e) =>
+                      updateQuestion(question.id, "text", e.target.value)
+                    }
+                    placeholder="Текст вопроса"
                     required
                   />
 
-                  <Select
-                    value={question.type}
-                    onValueChange={(value: QuestionType) => {
-                      updateQuestion(question.id, "type", value);
-                      if (value === "multiple_choice" && question.options.length === 0) {
-                        updateQuestion(question.id, "options", ["", ""]);
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="text">Текстовый ответ</SelectItem>
-                      <SelectItem value="multiple_choice">Множественный выбор</SelectItem>
-                      <SelectItem value="rating">Рейтинг (1-5)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Label>Тип вопроса</Label>
+                    <Select
+                      value={question.type}
+                      onValueChange={(value: QuestionType) => {
+                        updateQuestion(question.id, "type", value);
+                        if (value === "multiple_choice" && question.options.length === 0) {
+                          updateQuestion(question.id, "options", ["", ""]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Текст</SelectItem>
+                        <SelectItem value="multiple_choice">Множественный выбор</SelectItem>
+                        <SelectItem value="rating">Рейтинг (1-5)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   {question.type === "multiple_choice" && (
-                    <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+                    <div className="flex items-center space-x-2 mt-4">
+                      <Checkbox
+                        id={`allow-multiple-${question.id}`}
+                        checked={question.allowMultiple}
+                        onCheckedChange={(checked) => {
+                          updateQuestion(question.id, "allowMultiple", checked as boolean);
+                        }}
+                      />
+                      <Label htmlFor={`allow-multiple-${question.id}`} className="text-sm cursor-pointer">
+                        Разрешить множественный выбор
+                      </Label>
+                    </div>
+                  )}
+
+                  {question.type === "multiple_choice" && (
+                    <div className="space-y-3 mt-4">
                       <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">Варианты ответов</Label>
+                        <Label className="text-sm">Варианты ответов</Label>
                         <Button
                           type="button"
                           variant="ghost"
@@ -248,15 +305,17 @@ const CreateSurvey = () => {
                           onClick={() => addOption(question.id)}
                         >
                           <Plus className="w-3 h-3 mr-1" />
-                          Добавить вариант
+                          Добавить
                         </Button>
                       </div>
                       {question.options.map((option, optIdx) => (
                         <div key={optIdx} className="flex gap-2">
                           <Input
-                            placeholder={`Вариант ${optIdx + 1}`}
                             value={option}
-                            onChange={(e) => updateOption(question.id, optIdx, e.target.value)}
+                            onChange={(e) =>
+                              updateOption(question.id, optIdx, e.target.value)
+                            }
+                            placeholder={`Вариант ${optIdx + 1}`}
                           />
                           {question.options.length > 2 && (
                             <Button
@@ -274,13 +333,23 @@ const CreateSurvey = () => {
                   )}
                 </Card>
               ))}
+
+              {questions.length === 0 && (
+                <div className="text-center py-12 text-survey-secondary">
+                  <p>Нет вопросов. Нажмите "Добавить вопрос" чтобы начать.</p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-4">
-              <Button type="submit" disabled={isSubmitting} className="flex-1 shadow-medium">
-                {isSubmitting ? "Создание..." : "Создать опрос"}
+              <Button type="submit" className="flex-1">
+                Создать опрос
               </Button>
-              <Button type="button" variant="outline" onClick={() => navigate("/")} disabled={isSubmitting}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate("/")}
+              >
                 Отмена
               </Button>
             </div>

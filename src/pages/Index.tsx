@@ -1,11 +1,68 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Link } from "react-router-dom";
-import { ClipboardList, BarChart3, Users, Sparkles } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ClipboardList, BarChart3, Users, Sparkles, LogOut, LogIn } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import type { User } from "@supabase/supabase-js";
 
 const Index = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Ошибка при выходе");
+    } else {
+      toast.success("Вы вышли из аккаунта");
+      navigate("/");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-hero">
+      {/* Auth Button */}
+      <div className="absolute top-4 right-4 z-10">
+        {user ? (
+          <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2 border border-white/20">
+            <span className="text-white/80 text-sm hidden sm:inline">{user.email}</span>
+            <Button
+              onClick={handleLogout}
+              variant="ghost"
+              size="sm"
+              className="text-white hover:bg-white/20"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Выйти
+            </Button>
+          </div>
+        ) : (
+          <Button
+            onClick={() => navigate("/auth")}
+            variant="outline"
+            size="sm"
+            className="bg-white/10 backdrop-blur-sm border-white/20 text-white hover:bg-white/20"
+          >
+            <LogIn className="w-4 h-4 mr-2" />
+            Войти
+          </Button>
+        )}
+      </div>
+
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="text-center max-w-4xl mx-auto space-y-8">

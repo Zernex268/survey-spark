@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +22,7 @@ interface Question {
   question_text: string;
   question_type: string;
   order_index: number;
+  allow_multiple_answers: boolean;
   question_options: { id: string; option_text: string; order_index: number }[];
 }
 
@@ -74,11 +76,23 @@ const TakeSurvey = () => {
     setAnswers({ ...answers, [questionId]: value });
   };
 
+  const handleMultipleChoiceToggle = (questionId: string, optionId: string) => {
+    const currentAnswers = answers[questionId] || [];
+    const newAnswers = currentAnswers.includes(optionId)
+      ? currentAnswers.filter((id: string) => id !== optionId)
+      : [...currentAnswers, optionId];
+    setAnswers({ ...answers, [questionId]: newAnswers });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validate all questions are answered
-    const unanswered = questions.filter(q => !answers[q.id]);
+    const unanswered = questions.filter(q => {
+      const answer = answers[q.id];
+      return !answer || (Array.isArray(answer) && answer.length === 0);
+    });
+    
     if (unanswered.length > 0) {
       toast.error("Пожалуйста, ответьте на все вопросы");
       return;
@@ -97,25 +111,38 @@ const TakeSurvey = () => {
       if (responseError) throw responseError;
 
       // Create answers
-      const answersToInsert = Object.entries(answers).map(([questionId, answer]) => {
+      const answersToInsert = [];
+      for (const [questionId, answer] of Object.entries(answers)) {
         const question = questions.find(q => q.id === questionId);
         
-        if (question?.question_type === "multiple_choice") {
-          return {
+        if (question?.question_type === "multiple_choice" && question.allow_multiple_answers) {
+          // Multiple selection - create multiple answer records
+          for (const optionId of answer as string[]) {
+            answersToInsert.push({
+              response_id: response.id,
+              question_id: questionId,
+              selected_option_id: optionId,
+              answer_text: null
+            });
+          }
+        } else if (question?.question_type === "multiple_choice") {
+          // Single selection
+          answersToInsert.push({
             response_id: response.id,
             question_id: questionId,
             selected_option_id: answer,
             answer_text: null
-          };
+          });
         } else {
-          return {
+          // Text or rating
+          answersToInsert.push({
             response_id: response.id,
             question_id: questionId,
             answer_text: String(answer),
             selected_option_id: null
-          };
+          });
         }
-      });
+      }
 
       const { error: answersError } = await supabase
         .from("answers")
@@ -135,16 +162,16 @@ const TakeSurvey = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
-        <div className="animate-pulse text-xl text-muted-foreground">Загрузка...</div>
+      <div className="min-h-screen bg-gradient-to-br from-survey-gradient-start via-survey-gradient-middle to-survey-gradient-end flex items-center justify-center">
+        <div className="animate-pulse text-xl text-white">Загрузка...</div>
       </div>
     );
   }
 
   if (!survey) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
-        <Card className="p-12 text-center shadow-large">
+      <div className="min-h-screen bg-gradient-to-br from-survey-gradient-start via-survey-gradient-middle to-survey-gradient-end flex items-center justify-center">
+        <Card className="p-12 text-center shadow-survey-card">
           <h2 className="text-2xl font-bold mb-4">Опрос не найден</h2>
           <Button asChild>
             <Link to="/surveys">Вернуться к списку</Link>
@@ -156,15 +183,15 @@ const TakeSurvey = () => {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
-        <Card className="p-12 text-center shadow-large max-w-md">
-          <CheckCircle2 className="w-16 h-16 text-primary mx-auto mb-6" />
-          <h2 className="text-3xl font-bold mb-4">Спасибо!</h2>
-          <p className="text-muted-foreground mb-8 text-lg">
+      <div className="min-h-screen bg-gradient-to-br from-survey-gradient-start via-survey-gradient-middle to-survey-gradient-end flex items-center justify-center">
+        <Card className="p-12 text-center shadow-survey-card max-w-md">
+          <CheckCircle2 className="w-16 h-16 text-survey-primary mx-auto mb-6" />
+          <h2 className="text-3xl font-display font-bold mb-4 text-survey-primary">Спасибо!</h2>
+          <p className="text-survey-secondary mb-8 text-lg">
             Ваши ответы успешно сохранены
           </p>
           <div className="flex flex-col gap-3">
-            <Button asChild className="shadow-medium">
+            <Button asChild>
               <Link to="/surveys">Другие опросы</Link>
             </Button>
             <Button asChild variant="outline">
@@ -177,29 +204,29 @@ const TakeSurvey = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-hero py-12">
+    <div className="min-h-screen bg-gradient-to-br from-survey-gradient-start via-survey-gradient-middle to-survey-gradient-end py-12">
       <div className="container mx-auto px-4 max-w-3xl">
-        <Button asChild variant="ghost" className="mb-6">
+        <Button asChild variant="ghost" className="mb-6 text-white hover:bg-white/10">
           <Link to="/surveys">
             <ArrowLeft className="w-4 h-4 mr-2" />
             К списку опросов
           </Link>
         </Button>
 
-        <Card className="p-8 md:p-12 shadow-large bg-gradient-card border-0">
+        <Card className="p-8 md:p-12 shadow-survey-card bg-white/95 backdrop-blur-sm">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
+            <h1 className="text-4xl font-display font-bold mb-4 text-survey-primary">
               {survey.title}
             </h1>
             {survey.description && (
-              <p className="text-muted-foreground text-lg">{survey.description}</p>
+              <p className="text-survey-secondary text-lg">{survey.description}</p>
             )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-8">
             {questions.map((question, index) => (
-              <Card key={question.id} className="p-6 space-y-4 shadow-soft">
-                <Label className="text-lg font-semibold">
+              <Card key={question.id} className="p-6 space-y-4 bg-survey-card-bg">
+                <Label className="text-lg font-semibold text-survey-primary">
                   {index + 1}. {question.question_text}
                 </Label>
 
@@ -213,7 +240,7 @@ const TakeSurvey = () => {
                   />
                 )}
 
-                {question.question_type === "multiple_choice" && (
+                {question.question_type === "multiple_choice" && !question.allow_multiple_answers && (
                   <RadioGroup
                     value={answers[question.id]}
                     onValueChange={(value) => handleAnswerChange(question.id, value)}
@@ -222,7 +249,7 @@ const TakeSurvey = () => {
                     {question.question_options
                       .sort((a, b) => a.order_index - b.order_index)
                       .map((option) => (
-                        <div key={option.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors">
+                        <div key={option.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-survey-hover transition-colors">
                           <RadioGroupItem value={option.id} id={option.id} />
                           <Label htmlFor={option.id} className="flex-1 cursor-pointer font-normal">
                             {option.option_text}
@@ -230,6 +257,25 @@ const TakeSurvey = () => {
                         </div>
                       ))}
                   </RadioGroup>
+                )}
+
+                {question.question_type === "multiple_choice" && question.allow_multiple_answers && (
+                  <div className="space-y-3">
+                    {question.question_options
+                      .sort((a, b) => a.order_index - b.order_index)
+                      .map((option) => (
+                        <div key={option.id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-survey-hover transition-colors">
+                          <Checkbox
+                            id={option.id}
+                            checked={(answers[question.id] || []).includes(option.id)}
+                            onCheckedChange={() => handleMultipleChoiceToggle(question.id, option.id)}
+                          />
+                          <Label htmlFor={option.id} className="flex-1 cursor-pointer font-normal">
+                            {option.option_text}
+                          </Label>
+                        </div>
+                      ))}
+                  </div>
                 )}
 
                 {question.question_type === "rating" && (
@@ -252,7 +298,7 @@ const TakeSurvey = () => {
               </Card>
             ))}
 
-            <Button type="submit" disabled={isSubmitting} className="w-full text-lg py-6 shadow-medium">
+            <Button type="submit" disabled={isSubmitting} className="w-full text-lg py-6">
               {isSubmitting ? "Отправка..." : "Отправить ответы"}
             </Button>
           </form>

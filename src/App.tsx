@@ -8,6 +8,7 @@ import CreateSurvey from "./pages/CreateSurvey";
 import SurveysList from "./pages/SurveysList";
 import TakeSurvey from "./pages/TakeSurvey";
 import SurveyResults from "./pages/SurveyResults";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/create" element={<CreateSurvey />} />
           <Route path="/surveys" element={<SurveysList />} />
           <Route path="/survey/:id" element={<TakeSurvey />} />
