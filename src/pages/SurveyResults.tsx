@@ -17,6 +17,7 @@ interface Question {
   question_text: string;
   question_type: string;
   order_index: number;
+  allow_multiple_answers: boolean;
 }
 
 interface QuestionOption {
@@ -144,10 +145,17 @@ const SurveyResults = () => {
         }
       });
 
-      const total = questionAnswers.length;
+      // For multiple choice, calculate percentage based on total responses, not total answers
+      // This is especially important for questions that allow multiple selections
+      const total = responsesCount;
 
       return (
         <div className="space-y-4">
+          {question.allow_multiple_answers && (
+            <p className="text-sm text-muted-foreground italic">
+              Можно было выбрать несколько вариантов
+            </p>
+          )}
           {questionOptions.map(option => {
             const count = optionCounts[option.id] || 0;
             const percentage = total > 0 ? (count / total) * 100 : 0;

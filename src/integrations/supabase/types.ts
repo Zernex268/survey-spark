@@ -97,6 +97,7 @@ export type Database = {
       }
       questions: {
         Row: {
+          allow_multiple_answers: boolean
           created_at: string
           id: string
           order_index: number
@@ -105,6 +106,7 @@ export type Database = {
           survey_id: string
         }
         Insert: {
+          allow_multiple_answers?: boolean
           created_at?: string
           id?: string
           order_index: number
@@ -113,6 +115,7 @@ export type Database = {
           survey_id: string
         }
         Update: {
+          allow_multiple_answers?: boolean
           created_at?: string
           id?: string
           order_index?: number
@@ -163,6 +166,7 @@ export type Database = {
           id: string
           title: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -170,6 +174,7 @@ export type Database = {
           id?: string
           title: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -177,6 +182,7 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
