@@ -86,6 +86,11 @@ const Index = () => {
             <Button asChild variant="outline" size="lg" className="text-lg px-8">
               <Link to="/surveys">Просмотреть опросы</Link>
             </Button>
+            {user && (
+              <Button asChild variant="secondary" size="lg" className="text-lg px-8">
+                <Link to="/my-surveys">Мои опросы</Link>
+              </Button>
+            )}
           </div>
         </div>
       </section>
