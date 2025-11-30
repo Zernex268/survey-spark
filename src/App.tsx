@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import CreateSurvey from "./pages/CreateSurvey";
 import SurveysList from "./pages/SurveysList";
+import MySurveys from "./pages/MySurveys";
 import TakeSurvey from "./pages/TakeSurvey";
 import SurveyResults from "./pages/SurveyResults";
 import Auth from "./pages/Auth";
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/create" element={<CreateSurvey />} />
           <Route path="/surveys" element={<SurveysList />} />
+          <Route path="/my-surveys" element={<MySurveys />} />
           <Route path="/survey/:id" element={<TakeSurvey />} />
           <Route path="/results/:id" element={<SurveyResults />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
