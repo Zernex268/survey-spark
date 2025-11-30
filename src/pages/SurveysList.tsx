@@ -3,24 +3,46 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, ClipboardList, Calendar } from "lucide-react";
+import { ArrowLeft, ClipboardList, Calendar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import type { User } from "@supabase/supabase-js";
 
 interface Survey {
   id: string;
   title: string;
   description: string | null;
   created_at: string;
+  user_id: string | null;
 }
 
 const SurveysList = () => {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchSurveys();
+    fetchUser();
   }, []);
+
+  const fetchUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
+  };
 
   const fetchSurveys = async () => {
     try {
@@ -35,6 +57,31 @@ const SurveysList = () => {
       console.error("Error fetching surveys:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (surveyId: string) => {
+    try {
+      const { error } = await supabase
+        .from("surveys")
+        .delete()
+        .eq("id", surveyId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Опрос удален",
+        description: "Опрос успешно удален",
+      });
+
+      setSurveys(surveys.filter((s) => s.id !== surveyId));
+    } catch (error) {
+      console.error("Error deleting survey:", error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить опрос",
+        variant: "destructive",
+      });
     }
   };
 
@@ -108,6 +155,29 @@ const SurveysList = () => {
                   <Button asChild variant="outline" className="flex-1">
                     <Link to={`/results/${survey.id}`}>Результаты</Link>
                   </Button>
+                  {user && survey.user_id === user.id && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="icon">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Удалить опрос?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Это действие нельзя отменить. Опрос и все его ответы будут удалены навсегда.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Отмена</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(survey.id)}>
+                            Удалить
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                 </div>
               </Card>
             ))}
